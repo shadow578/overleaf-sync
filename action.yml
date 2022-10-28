@@ -1,4 +1,4 @@
-name: 'overleaf-sync'
+name: 'overleaf-ce-sync'
 description: 'one-way sync overleaf ce projects to github'
 inputs:
   host:
@@ -13,7 +13,7 @@ inputs:
   projects:
     required: false
     description: 'a list of projects to include in sync, one per line. if not provided, all projects are synced'
-    default: 
+    default:
   downloads_path:
     required: true
     description: 'path in the repo in which the projects are saved'
