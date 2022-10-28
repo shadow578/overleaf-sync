@@ -1,7 +1,7 @@
 {
   "name": "overleaf-ce-sync",
   "description": "one-way sync overleaf ce projects to github",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "main": "lib/main.js",
   "scripts": {

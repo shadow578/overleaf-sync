@@ -107,7 +107,7 @@ function run(args) {
             (0, core_1.debug)(`unzipping project.zip`);
             const zip = yield yauzl.open(zipPath);
             yield zip.walkEntries((entry) => __awaiter(this, void 0, void 0, function* () {
-                const p = path_1.default.join(projectDir, (0, sanitize_filename_1.default)(entry.fileName));
+                const p = path_1.default.join(projectDir, entry.fileName);
                 (0, core_1.debug)(`writing ${entry.fileName} to ${p}`);
                 yield pipe(yield zip.openReadStream(entry), yield createWriteStreamAndDir(p));
             }));

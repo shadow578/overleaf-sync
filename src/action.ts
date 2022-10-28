@@ -126,7 +126,7 @@ export default async function run(args: ActionArgs) {
         debug_log(`unzipping project.zip`);
         const zip = await yauzl.open(zipPath);
         await zip.walkEntries(async entry => {
-            const p = path.join(projectDir, sanitizeFilename(entry.fileName));
+            const p = path.join(projectDir, entry.fileName);
             debug_log(`writing ${entry.fileName} to ${p}`);
             await pipe(
                 await zip.openReadStream(entry),
