@@ -4,6 +4,7 @@ import {
     error as error_log
 } from "@actions/core";
 import * as yauzl from "yauzl-promise";
+import { default as sanitizeFilename } from "sanitize-filename";
 import * as fs from "fs";
 import * as fsp from "fs/promises";
 import path from "path";
@@ -105,7 +106,7 @@ export default async function run(args: ActionArgs) {
     debug_log(`got ${projects.length} projects`);
     for (const project of projects) {
         // build directory for the project
-        const projectDir = path.join(args.downloads_path, project.name);
+        const projectDir = path.join(args.downloads_path, sanitizeFilename(project.name));
         debug_log(`downloading project ${project.id} to ${projectDir}`);
 
         // remove previous contents
@@ -125,7 +126,7 @@ export default async function run(args: ActionArgs) {
         debug_log(`unzipping project.zip`);
         const zip = await yauzl.open(zipPath);
         await zip.walkEntries(async entry => {
-            const p = path.join(projectDir, entry.fileName);
+            const p = path.join(projectDir, sanitizeFilename(entry.fileName));
             debug_log(`writing ${entry.fileName} to ${p}`);
             await pipe(
                 await zip.openReadStream(entry),
