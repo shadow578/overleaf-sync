@@ -40,6 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core_1 = __nccwpck_require__(2186);
 const yauzl = __importStar(__nccwpck_require__(2804));
+const sanitize_filename_1 = __importDefault(__nccwpck_require__(9976));
 const fs = __importStar(__nccwpck_require__(5747));
 const fsp = __importStar(__nccwpck_require__(9225));
 const path_1 = __importDefault(__nccwpck_require__(5622));
@@ -92,7 +93,7 @@ function run(args) {
         (0, core_1.debug)(`got ${projects.length} projects`);
         for (const project of projects) {
             // build directory for the project
-            const projectDir = path_1.default.join(args.downloads_path, project.name);
+            const projectDir = path_1.default.join(args.downloads_path, (0, sanitize_filename_1.default)(project.name));
             (0, core_1.debug)(`downloading project ${project.id} to ${projectDir}`);
             // remove previous contents
             yield fsp.rm(projectDir, {
@@ -106,7 +107,7 @@ function run(args) {
             (0, core_1.debug)(`unzipping project.zip`);
             const zip = yield yauzl.open(zipPath);
             yield zip.walkEntries((entry) => __awaiter(this, void 0, void 0, function* () {
-                const p = path_1.default.join(projectDir, entry.fileName);
+                const p = path_1.default.join(projectDir, (0, sanitize_filename_1.default)(entry.fileName));
                 (0, core_1.debug)(`writing ${entry.fileName} to ${p}`);
                 yield pipe(yield zip.openReadStream(entry), yield createWriteStreamAndDir(p));
             }));
@@ -13463,6 +13464,73 @@ exports.getProxyForUrl = getProxyForUrl;
 
 /***/ }),
 
+/***/ 9976:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+/*jshint node:true*/
+
+
+/**
+ * Replaces characters in strings that are illegal/unsafe for filenames.
+ * Unsafe characters are either removed or replaced by a substitute set
+ * in the optional `options` object.
+ *
+ * Illegal Characters on Various Operating Systems
+ * / ? < > \ : * | "
+ * https://kb.acronis.com/content/39790
+ *
+ * Unicode Control codes
+ * C0 0x00-0x1f & C1 (0x80-0x9f)
+ * http://en.wikipedia.org/wiki/C0_and_C1_control_codes
+ *
+ * Reserved filenames on Unix-based systems (".", "..")
+ * Reserved filenames in Windows ("CON", "PRN", "AUX", "NUL", "COM1",
+ * "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+ * "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", and
+ * "LPT9") case-insesitively and with or without filename extensions.
+ *
+ * Capped at 255 characters in length.
+ * http://unix.stackexchange.com/questions/32795/what-is-the-maximum-allowed-filename-and-folder-size-with-ecryptfs
+ *
+ * @param  {String} input   Original filename
+ * @param  {Object} options {replacement: String | Function }
+ * @return {String}         Sanitized filename
+ */
+
+var truncate = __nccwpck_require__(9699);
+
+var illegalRe = /[\/\?<>\\:\*\|"]/g;
+var controlRe = /[\x00-\x1f\x80-\x9f]/g;
+var reservedRe = /^\.+$/;
+var windowsReservedRe = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+var windowsTrailingRe = /[\. ]+$/;
+
+function sanitize(input, replacement) {
+  if (typeof input !== 'string') {
+    throw new Error('Input must be string');
+  }
+  var sanitized = input
+    .replace(illegalRe, replacement)
+    .replace(controlRe, replacement)
+    .replace(reservedRe, replacement)
+    .replace(windowsReservedRe, replacement)
+    .replace(windowsTrailingRe, replacement);
+  return truncate(sanitized, 255);
+}
+
+module.exports = function (input, options) {
+  var replacement = (options && options.replacement) || '';
+  var output = sanitize(input, replacement);
+  if (replacement === '') {
+    return output;
+  }
+  return sanitize(output, '');
+};
+
+
+/***/ }),
+
 /***/ 7303:
 /***/ ((module) => {
 
@@ -13826,6 +13894,70 @@ module.exports = {
 	stdout: getSupportLevel(process.stdout),
 	stderr: getSupportLevel(process.stderr)
 };
+
+
+/***/ }),
+
+/***/ 9699:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+var truncate = __nccwpck_require__(6758);
+var getLength = Buffer.byteLength.bind(Buffer);
+module.exports = truncate.bind(null, getLength);
+
+
+/***/ }),
+
+/***/ 6758:
+/***/ ((module) => {
+
+"use strict";
+
+
+function isHighSurrogate(codePoint) {
+  return codePoint >= 0xd800 && codePoint <= 0xdbff;
+}
+
+function isLowSurrogate(codePoint) {
+  return codePoint >= 0xdc00 && codePoint <= 0xdfff;
+}
+
+// Truncate string by size in bytes
+module.exports = function truncate(getLength, string, byteLength) {
+  if (typeof string !== "string") {
+    throw new Error("Input must be string");
+  }
+
+  var charLength = string.length;
+  var curByteLength = 0;
+  var codePoint;
+  var segment;
+
+  for (var i = 0; i < charLength; i += 1) {
+    codePoint = string.charCodeAt(i);
+    segment = string[i];
+
+    if (isHighSurrogate(codePoint) && isLowSurrogate(string.charCodeAt(i + 1))) {
+      i += 1;
+      segment += string[i];
+    }
+
+    curByteLength += getLength(segment);
+
+    if (curByteLength === byteLength) {
+      return string.slice(0, i + 1);
+    }
+    else if (curByteLength > byteLength) {
+      return string.slice(0, i - segment.length + 1);
+    }
+  }
+
+  return string;
+};
+
 
 
 /***/ }),
