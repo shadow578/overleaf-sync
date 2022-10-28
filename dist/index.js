@@ -65,8 +65,10 @@ function run(args) {
                 });
             }
         }
-        // get all available projects and filter by selection
+        // get all available projects and remove deleted and archived projects
         let projects = yield overleaf.getProjects();
+        projects = projects.filter(p => !p.archived && !p.trashed);
+        // filter by selection
         if (args.projects) {
             (0, core_1.debug)(`applying project id/name filter`);
             projects = projects.filter(p => {
@@ -86,17 +88,17 @@ function run(args) {
                 return isNaN(lastModified) || lastModified >= args.changed_after.getTime();
             });
         }
-        // remove previously downloaded projects
-        yield fsp.rm(args.downloads_path, {
-            recursive: true,
-            force: true
-        });
         // download all projects and extract to downloads dir
         (0, core_1.debug)(`got ${projects.length} projects`);
         for (const project of projects) {
-            // create directory for the project
+            // build directory for the project
             const projectDir = path_1.default.join(args.downloads_path, project.name);
             (0, core_1.debug)(`downloading project ${project.id} to ${projectDir}`);
+            // remove previous contents
+            yield fsp.rm(projectDir, {
+                recursive: true,
+                force: true
+            });
             // download project as .zip file
             const zipPath = path_1.default.join(projectDir, "project.zip");
             yield pipe(yield overleaf.downloadProject(project), yield createWriteStreamAndDir(zipPath));
@@ -514,7 +516,7 @@ function main() {
         const password = core.getInput("password", { required: true });
         const downloads_path = core.getInput("downloads_path", { required: true });
         const accept_invites = !!core.getBooleanInput("accept_invites", { required: false });
-        const force_download = !!!core.getBooleanInput("force_download", { required: false });
+        const force_download = !!core.getBooleanInput("force_download", { required: false });
         const projectsRaw = core.getInput("projects", { required: false });
         let projects;
         if (projectsRaw) {
