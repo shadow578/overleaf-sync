@@ -10,7 +10,7 @@ async function main() {
   const password = core.getInput("password", { required: true });
   const downloads_path = core.getInput("downloads_path", { required: true });
   const accept_invites = !!core.getBooleanInput("accept_invites", { required: false });
-  const force_download = !!!core.getBooleanInput("force_download", { required: false });
+  const force_download = !!core.getBooleanInput("force_download", { required: false });
 
   const projectsRaw = core.getInput("projects", { required: false });
   let projects: string[] | undefined;

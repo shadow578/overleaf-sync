@@ -76,8 +76,11 @@ export default async function run(args: ActionArgs) {
         }
     }
 
-    // get all available projects and filter by selection
+    // get all available projects and remove deleted and archived projects
     let projects = await overleaf.getProjects();
+    projects = projects.filter(p => !p.archived && !p.trashed);
+
+    // filter by selection
     if (args.projects) {
         debug_log(`applying project id/name filter`);
         projects = projects.filter(p => {
@@ -98,18 +101,18 @@ export default async function run(args: ActionArgs) {
         });
     }
 
-    // remove previously downloaded projects
-    await fsp.rm(args.downloads_path, {
-        recursive: true,
-        force: true
-    });
-
     // download all projects and extract to downloads dir
     debug_log(`got ${projects.length} projects`);
     for (const project of projects) {
-        // create directory for the project
+        // build directory for the project
         const projectDir = path.join(args.downloads_path, project.name);
         debug_log(`downloading project ${project.id} to ${projectDir}`);
+
+        // remove previous contents
+        await fsp.rm(projectDir, {
+            recursive: true,
+            force: true
+        });
 
         // download project as .zip file
         const zipPath = path.join(projectDir, "project.zip");
