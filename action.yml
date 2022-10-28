@@ -1,11 +1,30 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'overleaf-sync'
+description: 'one-way sync overleaf ce projects to github'
 inputs:
-  milliseconds: # change this
+  host:
     required: true
-    description: 'input description here'
-    default: 'default value if applicable'
+    description: 'hostname of the overleaf ce instance'
+  email:
+    required: true
+    description: 'email of your overleaf ce account'
+  password:
+    required: true
+    description: 'password of your overleaf ce account'
+  projects:
+    required: false
+    description: 'a list of projects to include in sync, one per line. if not provided, all projects are synced'
+    default: 
+  downloads_path:
+    required: true
+    description: 'path in the repo in which the projects are saved'
+  accept_invites:
+    required: false
+    description: 'automatically accept pending invites'
+    default: false
+  force_download:
+    required: false
+    description: 'if set, all projects are downloaded, even if they have not been changed since the last workflow run'
+    default: false
 runs:
   using: 'node16'
   main: 'dist/index.js'
