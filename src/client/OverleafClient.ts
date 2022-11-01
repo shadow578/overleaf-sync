@@ -1,8 +1,8 @@
 import axios from "axios";
 import * as HTMLParser from "node-html-parser";
 import { Stream } from "stream";
-import { OverleafProject, OverleafTag, ProjectInvite } from "./Model";
 import OverleafBaseClient from "./BaseClient";
+import { OverleafProject, OverleafProjectItem, OverleafTagItem, ProjectInvite } from "./Model";
 
 /**
  * a client for interacting with Overleaf community edition
@@ -98,7 +98,9 @@ export default class OverleafClient extends OverleafBaseClient {
         }
 
         const notifications = JSON.parse(notificationsJson);
-        if (notifications === undefined || notifications === null || !Array.isArray(notifications)) {
+        if (notifications === undefined
+            || notifications === null
+            || !Array.isArray(notifications)) {
             throw new Error("failed to parse notification data");
         }
 
@@ -108,11 +110,12 @@ export default class OverleafClient extends OverleafBaseClient {
                 return {
                     projectName: n.messageOpts.projectName,
                     projectId: n.messageOpts.projectId,
-                    username: n.messageOpts.username,
                     token: n.messageOpts.token,
-                    expires: n.expires
                 };
-            });
+            })
+            .filter(n => typeof (n.projectId) === "string"
+                && typeof (n.projectName) === "string"
+                && typeof (n.token) === "string");
     }
 
     /**
@@ -139,10 +142,10 @@ export default class OverleafClient extends OverleafBaseClient {
 
     //#region projects
     /**
-    * get all projects the user created
-    * 
-    * @returns a list of all projects the user has created
-    */
+     * get all projects the user created
+     * 
+     * @returns a list of all projects the user has created
+     */
     async getProjects(): Promise<OverleafProject[]> {
         this.requireSession();
 
@@ -152,8 +155,38 @@ export default class OverleafClient extends OverleafBaseClient {
         });
         this.updateSessionId(response);
 
+        // parse html from response
+        const html = HTMLParser.parse(response.data);
+
+        // parse raw projects and tags
+        const projects = this.parseProjectItems(html);
+        const tags = this.parseTagItems(html);
+
+        // map each project and tag item to a overleaf project object
+        return projects.map(pi => {
+            let tagNames = tags.filter(t => t.project_ids?.includes(pi.id)).map(t => t.name);
+            let lastUpdate = new Date(pi.lastUpdated || "");
+            return {
+                id: pi.id,
+                name: pi.name,
+                tags: tagNames,
+                isArchived: pi.archived,
+                isTrashed: pi.trashed,
+                lastUpdated: isNaN(lastUpdate.getTime()) ? undefined : lastUpdate
+            };
+        });
+
+    }
+
+    /**
+     * parse projects data from the overleaf project overview page
+     * 
+     * @param html the html of the projects page
+     * @returns the projects parsed
+     */
+    private parseProjectItems(html: HTMLParser.HTMLElement): OverleafProjectItem[] {
         // get and parse list of projects
-        const projectsJson = HTMLParser.parse(response.data)
+        const projectsJson = html
             .querySelector(`meta[name="ol-projects"]`)
             ?.getAttribute("content");
         if (!projectsJson) {
@@ -161,11 +194,46 @@ export default class OverleafClient extends OverleafBaseClient {
         }
 
         const projects = JSON.parse(projectsJson);
-        if (projects === undefined || projects === null || !Array.isArray(projects)) {
+        if (projects === undefined
+            || projects === null
+            || !Array.isArray(projects)
+            || !projects.every((project: any) =>
+                typeof (project.id) === "string"
+                && typeof (project.name) === "string"
+                && typeof (project.archived) === "boolean"
+                && typeof (project.trashed) === "boolean")) {
             throw new Error("failed to parse projects data");
         }
 
         return projects;
+    }
+
+    /**
+     * parse tag data from the overleaf project overview page
+     * 
+     * @param html the html of the projects page
+     * @returns the tags parsed
+     */
+    private parseTagItems(html: HTMLParser.HTMLElement): OverleafTagItem[] {
+        // get and parse tags data
+        const tagsJson = html
+            .querySelector(`meta[name="ol-tags"]`)
+            ?.getAttribute("content");
+        if (!tagsJson) {
+            throw new Error("tags data was empty");
+        }
+
+        const tags = JSON.parse(tagsJson);
+        if (tags === undefined
+            || tags === null
+            || !Array.isArray(tags)
+            || !tags.every((tag: any) => typeof (tag.name) === "string"
+                && Array.isArray(tag.project_ids)
+                && tag.project_ids.every((pi: any) => typeof (pi) === "string"))) {
+            throw new Error("failed to parse tags data");
+        }
+
+        return tags;
     }
 
     /**
@@ -187,42 +255,5 @@ export default class OverleafClient extends OverleafBaseClient {
         // return the response stream
         return response.data;
     }
-
-
-    //#endregion
-
-    //#region tags
-
-    /**
-     * get a list of all tags and the projects they contain
-     * 
-     * @returns a list of all tags and the projects they contain
-     */
-    async getTags(): Promise<OverleafTag[]> {
-        this.requireSession();
-
-        // query the projects overview page
-        const response = await axios.get(this.getUrl("/project"), {
-            headers: this.sessionHeaders
-        });
-        this.updateSessionId(response);
-
-        // get and parse tags data
-        const tagsJson = HTMLParser.parse(response.data)
-            .querySelector(`meta[name="ol-tags"]`)
-            ?.getAttribute("content");
-        if (!tagsJson) {
-            throw new Error("tags data was empty");
-        }
-
-        const tags = JSON.parse(tagsJson);
-        if (tags === undefined || tags === null || !Array.isArray(tags)) {
-            throw new Error("failed to parse tags data");
-        }
-
-        return tags;
-    }
-
     //#endregion
 }
-

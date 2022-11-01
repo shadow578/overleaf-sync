@@ -4,11 +4,19 @@
 export type OverleafProject = {
     id: string,
     name: string,
-    archived: boolean,
-    trashed: boolean,
-    lastUpdated?: string,
-    lastUpdatedBy?: OverleafUser,
-    owner?: OverleafUser;
+    tags: string[],
+    isArchived: boolean,
+    isTrashed: boolean,
+    lastUpdated?: Date;
+};
+
+/**
+ * a inviation to a overleaf project
+ */
+export type ProjectInvite = {
+    projectName: string,
+    projectId: string,
+    token: string;
 };
 
 /**
@@ -21,20 +29,22 @@ export type OverleafUser = {
 };
 
 /**
- * a inviation to a overleaf project
+ * raw project data, internal use only
  */
-export type ProjectInvite = {
-    projectName: string,
-    projectId: string,
-    username: string,
-    token: string,
-    expires: string;
+export type OverleafProjectItem = {
+    id: string,
+    name: string,
+    archived: boolean,
+    trashed: boolean,
+    lastUpdated?: string,
+    lastUpdatedBy?: OverleafUser,
+    owner?: OverleafUser;
 };
 
 /**
- * overleaf tag data
+ * raw tag data, internal use only
  */
-export type OverleafTag = {
+export type OverleafTagItem = {
     name: string,
     project_ids: string[];
 };

@@ -70,7 +70,7 @@ export default async function run(args: ActionArgs) {
     if (args.accept_invites) {
         debug_log(`checking for invites`);
         for (const invite of (await overleaf.getInvites())) {
-            debug_log(`accepting invite to join ${invite.projectName} by ${invite.username}...`);
+            debug_log(`accepting invite to join ${invite.projectName}...`);
             await overleaf.acceptInvite(invite).catch(err => {
                 error_log(`failed to accept invite for ${invite.projectName}`);
             });
@@ -79,7 +79,7 @@ export default async function run(args: ActionArgs) {
 
     // get all available projects and remove deleted and archived projects
     let projects = await overleaf.getProjects();
-    projects = projects.filter(p => !p.archived && !p.trashed);
+    projects = projects.filter(p => !p.isArchived && !p.isTrashed);
 
     // filter by selection
     if (args.projects) {
@@ -95,10 +95,9 @@ export default async function run(args: ActionArgs) {
         projects = projects.filter(p => {
             // default to including if not valid
             if (!p.lastUpdated) return true;
-            const lastModified = Date.parse(p.lastUpdated);
 
             // only include if changed after target date
-            return isNaN(lastModified) || lastModified >= args.changed_after!!.getTime();
+            return p.lastUpdated.getTime() >= args.changed_after!!.getTime();
         });
     }
 
