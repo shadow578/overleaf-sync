@@ -104,6 +104,7 @@ export default async function run(args: ActionArgs) {
     }
 
     // filter projects by change date
+    // always include projects that are not yet synced
     if (args.changed_after) {
         debug_log(`applying project change date filter with n < ${args.changed_after}`);
         projects = projects.filter(p => {
@@ -111,7 +112,18 @@ export default async function run(args: ActionArgs) {
             if (!p.lastUpdated) return true;
 
             // only include if changed after target date
-            return p.lastUpdated.getTime() >= args.changed_after!!.getTime();
+            let include = p.lastUpdated.getTime() >= args.changed_after!!.getTime();
+
+            // always sync if not yet present
+            if (!include) {
+                let dir = getDirectoryPathForProject(args.downloads_path, p.name);
+                if (!fs.existsSync(dir)) {
+                    debug_log(`${p.name} is not yet synced in ${dir}, excluding from changed_after filter`);
+                    return true;
+                }
+            }
+
+            return include;
         });
     }
 
@@ -119,7 +131,7 @@ export default async function run(args: ActionArgs) {
     debug_log(`got ${projects.length} projects`);
     for (const project of projects) {
         // build directory for the project
-        const projectDir = path.join(args.downloads_path, sanitizeFilename(project.name));
+        const projectDir = getDirectoryPathForProject(args.downloads_path, project.name);
         debug_log(`downloading project ${project.id} to ${projectDir}`);
 
         // remove previous contents
@@ -155,6 +167,10 @@ export default async function run(args: ActionArgs) {
     // log out of overleaf
     debug_log(`logging out...`);
     overleaf.logout();
+}
+
+function getDirectoryPathForProject(downloadsPath: string, projectName: string): string {
+    return path.join(downloadsPath, sanitizeFilename(projectName));
 }
 
 async function pipe(source: Stream, destination: Writable) {
