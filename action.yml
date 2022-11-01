@@ -14,6 +14,10 @@ inputs:
     required: false
     description: 'a list of projects to include in sync, one per line. if not provided, all projects are synced'
     default:
+  tags:
+    required: false
+    description: 'a list of tag names to include in sync, one per line. if not provided, projects are not filtered by tag'
+    default:
   downloads_path:
     required: true
     description: 'path in the repo in which the projects are saved'

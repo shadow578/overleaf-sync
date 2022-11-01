@@ -39,6 +39,12 @@ type ActionArgs = {
     projects?: string[],
 
     /**
+     * a list of tag names that should be included when downloading.
+     * if not set, projects are not filtered by tag
+     */
+    tags?: string[],
+
+    /**
      * path to download the projects to
      */
     downloads_path: string,
@@ -81,11 +87,19 @@ export default async function run(args: ActionArgs) {
     let projects = await overleaf.getProjects();
     projects = projects.filter(p => !p.isArchived && !p.isTrashed);
 
-    // filter by selection
+    // filter by project id selection
     if (args.projects) {
         debug_log(`applying project id/name filter`);
         projects = projects.filter(p => {
             return args.projects?.includes(p.id) || args.projects?.includes(p.name);
+        });
+    }
+
+    // filter by project tag
+    if (args.tags) {
+        debug_log(`applying project tag filter`);
+        projects = projects.filter(p => {
+            return p.tags.some(tag => args.tags!!.includes(tag));
         });
     }
 

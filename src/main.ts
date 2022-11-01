@@ -12,10 +12,24 @@ async function main() {
   const accept_invites = !!core.getBooleanInput("accept_invites", { required: false });
   const force_download = !!core.getBooleanInput("force_download", { required: false });
 
+  // parse project filters
   const projectsRaw = core.getInput("projects", { required: false });
   let projects: string[] | undefined;
   if (projectsRaw) {
     projects = projectsRaw.split(/\r?\n/).map(s => {
+      s = s.trim();
+      if (s.at(0) === s.at(-1)) {
+        s = s.substring(1, s.length - 1);
+      }
+      return s;
+    });
+  }
+
+  // parse tag filters
+  const tagsRaw = core.getInput("tags", { required: false });
+  let tags: string[] | undefined;
+  if (tagsRaw) {
+    tags = tagsRaw.split(/\r?\n/).map(s => {
       s = s.trim();
       if (s.at(0) === s.at(-1)) {
         s = s.substring(1, s.length - 1);
@@ -44,6 +58,7 @@ async function main() {
       password
     },
     projects,
+    tags,
     accept_invites,
     downloads_path,
     changed_after
