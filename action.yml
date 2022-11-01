@@ -29,6 +29,10 @@ inputs:
     required: false
     description: 'if set, all projects are downloaded, even if they have not been changed since the last workflow run'
     default: false
+  force_write_last_run:
+    required: false
+    description: 'if set, forces the .last_run file to be written on every run'
+    default: false
 runs:
   using: 'node16'
   main: 'dist/index.js'

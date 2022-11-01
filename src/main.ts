@@ -11,6 +11,7 @@ async function main() {
   const downloads_path = core.getInput("downloads_path", { required: true });
   const accept_invites = !!core.getBooleanInput("accept_invites", { required: false });
   const force_download = !!core.getBooleanInput("force_download", { required: false });
+  const force_write_last_run = !!core.getBooleanInput("force_write_last_run", { required: false });
 
   // parse project filters
   const projectsRaw = core.getInput("projects", { required: false });
@@ -51,7 +52,7 @@ async function main() {
   }
 
   // execute the action
-  await run({
+  let projectCount = await run({
     auth: {
       host,
       email,
@@ -63,9 +64,10 @@ async function main() {
     downloads_path,
     changed_after
   });
+  core.info(`synced ${projectCount} projects`);
 
-  // write last run time
-  if (!force_download) {
+  // write last run time if any projects were synced
+  if (force_write_last_run || (!force_download && projectCount !== 0)) {
     core.debug(`writing last run information`);
     await fsp.writeFile(".lastrun", new Date().toISOString(), "utf-8");
   }

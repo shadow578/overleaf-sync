@@ -65,8 +65,9 @@ type ActionArgs = {
  * run the workflow
  * 
  * @param args workflow args
+ * @return the number of projects synced
  */
-export default async function run(args: ActionArgs) {
+export default async function run(args: ActionArgs): Promise<number> {
     // create client and login 
     const overleaf = new OverleafClient(args.auth.host);
     await overleaf.login(args.auth.email, args.auth.password);
@@ -167,6 +168,9 @@ export default async function run(args: ActionArgs) {
     // log out of overleaf
     debug_log(`logging out...`);
     overleaf.logout();
+
+    // return projects count
+    return projects.length;
 }
 
 function getDirectoryPathForProject(downloadsPath: string, projectName: string): string {
