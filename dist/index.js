@@ -49,6 +49,7 @@ const OverleafClient_1 = __importDefault(__nccwpck_require__(2771));
  * run the workflow
  *
  * @param args workflow args
+ * @return the number of projects synced
  */
 function run(args) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -60,7 +61,7 @@ function run(args) {
         if (args.accept_invites) {
             (0, core_1.debug)(`checking for invites`);
             for (const invite of (yield overleaf.getInvites())) {
-                (0, core_1.debug)(`accepting invite to join ${invite.projectName} by ${invite.username}...`);
+                (0, core_1.debug)(`accepting invite to join ${invite.projectName}...`);
                 yield overleaf.acceptInvite(invite).catch(err => {
                     (0, core_1.error)(`failed to accept invite for ${invite.projectName}`);
                 });
@@ -68,8 +69,8 @@ function run(args) {
         }
         // get all available projects and remove deleted and archived projects
         let projects = yield overleaf.getProjects();
-        projects = projects.filter(p => !p.archived && !p.trashed);
-        // filter by selection
+        projects = projects.filter(p => !p.isArchived && !p.isTrashed);
+        // filter by project id selection
         if (args.projects) {
             (0, core_1.debug)(`applying project id/name filter`);
             projects = projects.filter(p => {
@@ -77,23 +78,39 @@ function run(args) {
                 return ((_a = args.projects) === null || _a === void 0 ? void 0 : _a.includes(p.id)) || ((_b = args.projects) === null || _b === void 0 ? void 0 : _b.includes(p.name));
             });
         }
+        // filter by project tag
+        if (args.tags) {
+            (0, core_1.debug)(`applying project tag filter`);
+            projects = projects.filter(p => {
+                return p.tags.some(tag => args.tags.includes(tag));
+            });
+        }
         // filter projects by change date
+        // always include projects that are not yet synced
         if (args.changed_after) {
             (0, core_1.debug)(`applying project change date filter with n < ${args.changed_after}`);
             projects = projects.filter(p => {
                 // default to including if not valid
                 if (!p.lastUpdated)
                     return true;
-                const lastModified = Date.parse(p.lastUpdated);
                 // only include if changed after target date
-                return isNaN(lastModified) || lastModified >= args.changed_after.getTime();
+                let include = p.lastUpdated.getTime() >= args.changed_after.getTime();
+                // always sync if not yet present
+                if (!include) {
+                    let dir = getDirectoryPathForProject(args.downloads_path, p.name);
+                    if (!fs.existsSync(dir)) {
+                        (0, core_1.debug)(`${p.name} is not yet synced in ${dir}, excluding from changed_after filter`);
+                        return true;
+                    }
+                }
+                return include;
             });
         }
         // download all projects and extract to downloads dir
         (0, core_1.debug)(`got ${projects.length} projects`);
         for (const project of projects) {
             // build directory for the project
-            const projectDir = path_1.default.join(args.downloads_path, (0, sanitize_filename_1.default)(project.name));
+            const projectDir = getDirectoryPathForProject(args.downloads_path, project.name);
             (0, core_1.debug)(`downloading project ${project.id} to ${projectDir}`);
             // remove previous contents
             yield fsp.rm(projectDir, {
@@ -118,9 +135,14 @@ function run(args) {
         // log out of overleaf
         (0, core_1.debug)(`logging out...`);
         overleaf.logout();
+        // return projects count
+        return projects.length;
     });
 }
 exports.default = run;
+function getDirectoryPathForProject(downloadsPath, projectName) {
+    return path_1.default.join(downloadsPath, (0, sanitize_filename_1.default)(projectName));
+}
 function pipe(source, destination) {
     return __awaiter(this, void 0, void 0, function* () {
         yield new Promise(resolve => {
@@ -381,7 +403,9 @@ class OverleafClient extends BaseClient_1.default {
                 throw new Error("notification data was empty");
             }
             const notifications = JSON.parse(notificationsJson);
-            if (notifications === undefined || notifications === null || !Array.isArray(notifications)) {
+            if (notifications === undefined
+                || notifications === null
+                || !Array.isArray(notifications)) {
                 throw new Error("failed to parse notification data");
             }
             // map notifications to invites
@@ -390,11 +414,12 @@ class OverleafClient extends BaseClient_1.default {
                 return {
                     projectName: n.messageOpts.projectName,
                     projectId: n.messageOpts.projectId,
-                    username: n.messageOpts.username,
                     token: n.messageOpts.token,
-                    expires: n.expires
                 };
-            });
+            })
+                .filter(n => typeof (n.projectId) === "string"
+                && typeof (n.projectName) === "string"
+                && typeof (n.token) === "string");
         });
     }
     /**
@@ -417,12 +442,11 @@ class OverleafClient extends BaseClient_1.default {
     //#endregion
     //#region projects
     /**
-    * get all projects the user created
-    *
-    * @returns a list of all projects the user has created
-    */
+     * get all projects the user created
+     *
+     * @returns a list of all projects the user has created
+     */
     getProjects() {
-        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             this.requireSession();
             // query the projects overview page
@@ -430,18 +454,76 @@ class OverleafClient extends BaseClient_1.default {
                 headers: this.sessionHeaders
             });
             this.updateSessionId(response);
-            // get and parse list of projects
-            const projectsJson = (_a = HTMLParser.parse(response.data)
-                .querySelector(`meta[name="ol-projects"]`)) === null || _a === void 0 ? void 0 : _a.getAttribute("content");
-            if (!projectsJson) {
-                throw new Error("projects data was empty");
-            }
-            const projects = JSON.parse(projectsJson);
-            if (projects === undefined || projects === null || !Array.isArray(projects)) {
-                throw new Error("failed to parse projects data");
-            }
-            return projects;
+            // parse html from response
+            const html = HTMLParser.parse(response.data);
+            // parse raw projects and tags
+            const projects = this.parseProjectItems(html);
+            const tags = this.parseTagItems(html);
+            // map each project and tag item to a overleaf project object
+            return projects.map(pi => {
+                let tagNames = tags.filter(t => { var _a; return (_a = t.project_ids) === null || _a === void 0 ? void 0 : _a.includes(pi.id); }).map(t => t.name);
+                let lastUpdate = new Date(pi.lastUpdated || "");
+                return {
+                    id: pi.id,
+                    name: pi.name,
+                    tags: tagNames,
+                    isArchived: pi.archived,
+                    isTrashed: pi.trashed,
+                    lastUpdated: isNaN(lastUpdate.getTime()) ? undefined : lastUpdate
+                };
+            });
         });
+    }
+    /**
+     * parse projects data from the overleaf project overview page
+     *
+     * @param html the html of the projects page
+     * @returns the projects parsed
+     */
+    parseProjectItems(html) {
+        var _a;
+        // get and parse list of projects
+        const projectsJson = (_a = html
+            .querySelector(`meta[name="ol-projects"]`)) === null || _a === void 0 ? void 0 : _a.getAttribute("content");
+        if (!projectsJson) {
+            throw new Error("projects data was empty");
+        }
+        const projects = JSON.parse(projectsJson);
+        if (projects === undefined
+            || projects === null
+            || !Array.isArray(projects)
+            || !projects.every((project) => typeof (project.id) === "string"
+                && typeof (project.name) === "string"
+                && typeof (project.archived) === "boolean"
+                && typeof (project.trashed) === "boolean")) {
+            throw new Error("failed to parse projects data");
+        }
+        return projects;
+    }
+    /**
+     * parse tag data from the overleaf project overview page
+     *
+     * @param html the html of the projects page
+     * @returns the tags parsed
+     */
+    parseTagItems(html) {
+        var _a;
+        // get and parse tags data
+        const tagsJson = (_a = html
+            .querySelector(`meta[name="ol-tags"]`)) === null || _a === void 0 ? void 0 : _a.getAttribute("content");
+        if (!tagsJson) {
+            throw new Error("tags data was empty");
+        }
+        const tags = JSON.parse(tagsJson);
+        if (tags === undefined
+            || tags === null
+            || !Array.isArray(tags)
+            || !tags.every((tag) => typeof (tag.name) === "string"
+                && Array.isArray(tag.project_ids)
+                && tag.project_ids.every((pi) => typeof (pi) === "string"))) {
+            throw new Error("failed to parse tags data");
+        }
+        return tags;
     }
     /**
     * download a project's source files as a .zip file
@@ -518,10 +600,24 @@ function main() {
         const downloads_path = core.getInput("downloads_path", { required: true });
         const accept_invites = !!core.getBooleanInput("accept_invites", { required: false });
         const force_download = !!core.getBooleanInput("force_download", { required: false });
+        const force_write_last_run = !!core.getBooleanInput("force_write_last_run", { required: false });
+        // parse project filters
         const projectsRaw = core.getInput("projects", { required: false });
         let projects;
         if (projectsRaw) {
             projects = projectsRaw.split(/\r?\n/).map(s => {
+                s = s.trim();
+                if (s.at(0) === s.at(-1)) {
+                    s = s.substring(1, s.length - 1);
+                }
+                return s;
+            });
+        }
+        // parse tag filters
+        const tagsRaw = core.getInput("tags", { required: false });
+        let tags;
+        if (tagsRaw) {
+            tags = tagsRaw.split(/\r?\n/).map(s => {
                 s = s.trim();
                 if (s.at(0) === s.at(-1)) {
                     s = s.substring(1, s.length - 1);
@@ -541,19 +637,21 @@ function main() {
             }
         }
         // execute the action
-        yield (0, action_1.default)({
+        let projectCount = yield (0, action_1.default)({
             auth: {
                 host,
                 email,
                 password
             },
             projects,
+            tags,
             accept_invites,
             downloads_path,
             changed_after
         });
-        // write last run time
-        if (!force_download) {
+        core.info(`synced ${projectCount} projects`);
+        // write last run time if any projects were synced
+        if (force_write_last_run || (!force_download && projectCount !== 0)) {
             core.debug(`writing last run information`);
             yield fsp.writeFile(".lastrun", new Date().toISOString(), "utf-8");
         }
