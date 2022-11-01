@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as HTMLParser from "node-html-parser";
 import { Stream } from "stream";
-import { OverleafProject, ProjectInvite } from "./Model";
+import { OverleafProject, OverleafTag, ProjectInvite } from "./Model";
 import OverleafBaseClient from "./BaseClient";
 
 /**
@@ -190,4 +190,39 @@ export default class OverleafClient extends OverleafBaseClient {
 
 
     //#endregion
+
+    //#region tags
+
+    /**
+     * get a list of all tags and the projects they contain
+     * 
+     * @returns a list of all tags and the projects they contain
+     */
+    async getTags(): Promise<OverleafTag[]> {
+        this.requireSession();
+
+        // query the projects overview page
+        const response = await axios.get(this.getUrl("/project"), {
+            headers: this.sessionHeaders
+        });
+        this.updateSessionId(response);
+
+        // get and parse tags data
+        const tagsJson = HTMLParser.parse(response.data)
+            .querySelector(`meta[name="ol-tags"]`)
+            ?.getAttribute("content");
+        if (!tagsJson) {
+            throw new Error("tags data was empty");
+        }
+
+        const tags = JSON.parse(tagsJson);
+        if (tags === undefined || tags === null || !Array.isArray(tags)) {
+            throw new Error("failed to parse tags data");
+        }
+
+        return tags;
+    }
+
+    //#endregion
 }
+

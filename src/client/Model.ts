@@ -30,3 +30,11 @@ export type ProjectInvite = {
     token: string,
     expires: string;
 };
+
+/**
+ * overleaf tag data
+ */
+export type OverleafTag = {
+    name: string,
+    project_ids: string[];
+};
